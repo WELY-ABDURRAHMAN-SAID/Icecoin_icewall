@@ -1,0 +1,13 @@
+- mkdir ~/IceCoin_IceWall/node1 ~/IceCoin_IceWall/node2 ~/IceCoin_IceWall/node3
+
+•node 
+(5000, 5001,5002) 
+
+- cd ~/IceCoin_IceWall/node1
+go run icecoin_testnet_icewall.go
+
+- curl -X POST http://127.0.0.1:5000/register_node \
+-H "Content-Type: application/json" \
+-d '{"nodes":["http://127.0.0.1:5001","http://127.0.0.1:5002"]}'
+
+curl http://127.0.0.1:5000/replace_chain
