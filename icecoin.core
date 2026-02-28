@@ -11,9 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/sha3"
+	"golang.org/x/crypto/ed25519"
 )
 
+// =======================
+// Structures
+// =======================
 type Transaction struct {
 	Sender   string `json:"sender"`
 	Receiver string `json:"receiver"`
@@ -32,24 +35,28 @@ type Blockchain struct {
 	Chain               []Block
 	PendingTransactions []Transaction
 	Difficulty          int
-	MiningReward        int
+	TotalSupply         int
+	MinedAmount         int
 	Nodes               []string
 	Mutex               sync.Mutex
 }
 
 // =======================
-// Blockchain Methods
+// Initialize Blockchain
 // =======================
-
 func NewBlockchain() *Blockchain {
 	bc := &Blockchain{
-		Difficulty:   4,
-		MiningReward: 25,
+		Difficulty: 4,
+		TotalSupply: 28000000, // total supply 28 juta
+		MinedAmount: 0,        // start decentralized, no pre-mine
 	}
 	bc.createBlock(1, "0")
 	return bc
 }
 
+// =======================
+// Block Functions
+// =======================
 func (bc *Blockchain) createBlock(proof int, previousHash string) Block {
 	bc.Mutex.Lock()
 	defer bc.Mutex.Unlock()
@@ -72,16 +79,14 @@ func (bc *Blockchain) getPreviousBlock() Block {
 }
 
 // =======================
-// IceWall Hash (Anti-Hack Layer)
+// Hash & Proof
 // =======================
-
-func calculateIceWallHash(block Block) string {
+func calculateHash(block Block) string {
 	record := strconv.Itoa(block.Index) + strconv.FormatInt(block.Timestamp, 10) +
 		fmt.Sprintf("%v", block.Transactions) + strconv.Itoa(block.Proof) + block.PreviousHash
-
-	h1 := sha256.Sum256([]byte(record))
-	h2 := sha3.Sum512(h1[:])
-	return hex.EncodeToString(h2[:])
+	h := sha256.New()
+	h.Write([]byte(record))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (bc *Blockchain) proofOfWork(previousProof int) int {
@@ -104,6 +109,9 @@ func stringRepeat(s string, count int) string {
 	return result
 }
 
+// =======================
+// Transaction Functions
+// =======================
 func (bc *Blockchain) addTransaction(sender, receiver string, amount int) int {
 	bc.Mutex.Lock()
 	defer bc.Mutex.Unlock()
@@ -117,9 +125,24 @@ func (bc *Blockchain) addTransaction(sender, receiver string, amount int) int {
 }
 
 // =======================
-// Node Network Methods
+// Mining Reward (Halving like Bitcoin)
 // =======================
+func (bc *Blockchain) getMiningReward(blockIndex int) int {
+	reward := 50            // reward awal per block
+	halvingInterval := 210000 // halving tiap 210,000 block
+	for blockIndex >= halvingInterval {
+		reward = reward / 2
+		blockIndex -= halvingInterval
+	}
+	if bc.MinedAmount+reward > bc.TotalSupply {
+		reward = bc.TotalSupply - bc.MinedAmount
+	}
+	return reward
+}
 
+// =======================
+// Node Functions
+// =======================
 func (bc *Blockchain) registerNode(address string) {
 	bc.Mutex.Lock()
 	defer bc.Mutex.Unlock()
@@ -161,27 +184,42 @@ func (bc *Blockchain) replaceChain() bool {
 }
 
 // =======================
-// Global Blockchain
+// Wallet Generation (Offline, Ed25519 post-quantum)
 // =======================
-
-var blockchain = NewBlockchain()
+func generateWallet() {
+	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("=== IceWall Wallet Generated ===")
+	fmt.Println("Private Key (HEX):", hex.EncodeToString(privKey))
+	fmt.Println("Public Key (HEX) :", hex.EncodeToString(pubKey))
+	fmt.Println("Save private key offline and encrypted!")
+}
 
 // =======================
 // HTTP Handlers
 // =======================
+var blockchain = NewBlockchain()
 
 func mineBlockHandler(w http.ResponseWriter, r *http.Request) {
-	prevBlock := blockchain.getPreviousBlock()
-	prevProof := prevBlock.Proof
-	proof := blockchain.proofOfWork(prevProof)
+	previousBlock := blockchain.getPreviousBlock()
+	previousProof := previousBlock.Proof
+	proof := blockchain.proofOfWork(previousProof)
 
-	blockchain.addTransaction("Ice Network", "Miner", blockchain.MiningReward)
-	prevHash := calculateIceWallHash(prevBlock)
-	block := blockchain.createBlock(proof, prevHash)
+	reward := blockchain.getMiningReward(previousBlock.Index + 1)
+	if reward > 0 {
+		blockchain.addTransaction("Network", "Miner", reward)
+		blockchain.MinedAmount += reward
+	}
+
+	previousHash := calculateHash(previousBlock)
+	block := blockchain.createBlock(proof, previousHash)
 
 	resp := map[string]interface{}{
-		"message": "Block mined successfully (IceWall secured ❄)",
+		"message": "Block mined successfully (IceWall Secured ❄)",
 		"block":   block,
+		"reward":  reward,
 	}
 	json.NewEncoder(w).Encode(resp)
 }
@@ -189,10 +227,12 @@ func mineBlockHandler(w http.ResponseWriter, r *http.Request) {
 func addTransactionHandler(w http.ResponseWriter, r *http.Request) {
 	var tx Transaction
 	json.NewDecoder(r.Body).Decode(&tx)
+
 	if tx.Sender == "" || tx.Receiver == "" || tx.Amount == 0 {
 		http.Error(w, "Missing values", http.StatusBadRequest)
 		return
 	}
+
 	index := blockchain.addTransaction(tx.Sender, tx.Receiver, tx.Amount)
 	resp := map[string]interface{}{
 		"message": fmt.Sprintf("Transaction will be added to Block %d", index),
@@ -202,10 +242,12 @@ func addTransactionHandler(w http.ResponseWriter, r *http.Request) {
 
 func getChainHandler(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
-		"network":  "Ice Coin",
-		"security": "IceWall",
-		"length":   len(blockchain.Chain),
-		"chain":    blockchain.Chain,
+		"network":      "Ice Coin",
+		"security":     "IceWall",
+		"length":       len(blockchain.Chain),
+		"chain":        blockchain.Chain,
+		"totalSupply":  blockchain.TotalSupply,
+		"minedAmount":  blockchain.MinedAmount,
 	}
 	json.NewEncoder(w).Encode(resp)
 }
@@ -214,9 +256,11 @@ func registerNodeHandler(w http.ResponseWriter, r *http.Request) {
 	var data map[string][]string
 	json.NewDecoder(r.Body).Decode(&data)
 	nodes := data["nodes"]
+
 	for _, node := range nodes {
 		blockchain.registerNode(node)
 	}
+
 	resp := map[string]interface{}{
 		"message": "Nodes registered successfully",
 		"total":   blockchain.Nodes,
@@ -230,6 +274,7 @@ func replaceChainHandler(w http.ResponseWriter, r *http.Request) {
 	if updated {
 		message = "Chain was replaced by the longest"
 	}
+
 	resp := map[string]interface{}{
 		"message": message,
 		"chain":   blockchain.Chain,
@@ -240,15 +285,16 @@ func replaceChainHandler(w http.ResponseWriter, r *http.Request) {
 // =======================
 // Main
 // =======================
-
 func main() {
-	port := ":5000" // node1 → node2 :5001, node3 :5002
+	// Jalankan generateWallet() sekali untuk membuat wallet offline
+	// generateWallet()
+
 	http.HandleFunc("/mine_block", mineBlockHandler)
 	http.HandleFunc("/add_transaction", addTransactionHandler)
 	http.HandleFunc("/get_chain", getChainHandler)
 	http.HandleFunc("/register_node", registerNodeHandler)
 	http.HandleFunc("/replace_chain", replaceChainHandler)
 
-	fmt.Println("Running Ice Coin IceWall node on http://127.0.0.1" + port)
-	http.ListenAndServe(port, nil)
+	fmt.Println("Running Ice Coin decentralized network ready on http://127.0.0.1:5000")
+	http.ListenAndServe(":5000", nil)
 }
