@@ -6,6 +6,12 @@
 - cd ~/IceCoin_IceWall/node1
 go run icecoin_testnet_icewall.go
 
+- cd ~/IceCoin_IceWall/node2
+go run icecoin_testnet_icewall.go
+
+- cd ~/IceCoin_IceWall/node3
+go run icecoin_testnet_icewall.go
+
 - curl -X POST http://127.0.0.1:5000/register_node \
 -H "Content-Type: application/json" \
 -d '{"nodes":["http://127.0.0.1:5001","http://127.0.0.1:5002"]}'
