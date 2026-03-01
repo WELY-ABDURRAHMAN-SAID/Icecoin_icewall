@@ -1,0 +1,78 @@
+package network
+
+import (
+	"encoding/gob"
+	"fmt"
+	"net"
+	"sync"
+)
+
+type Message struct {
+	Type string
+	Data string
+}
+
+type Node struct {
+	Address string
+	Peers   []string
+	Mutex   sync.Mutex
+}
+
+func NewNode(address string) *Node {
+	return &Node{
+		Address: address,
+		Peers:   []string{},
+	}
+}
+
+func (n *Node) Start() {
+	ln, err := net.Listen("tcp", n.Address)
+	if err != nil {
+		panic(err)
+	}
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			continue
+		}
+		go n.handle(conn)
+	}
+}
+
+func (n *Node) handle(conn net.Conn) {
+	defer conn.Close()
+
+	var msg Message
+	decoder := gob.NewDecoder(conn)
+	err := decoder.Decode(&msg)
+	if err != nil {
+		return
+	}
+
+	fmt.Println("Received:", msg.Type, msg.Data)
+}
+
+func (n *Node) Broadcast(msg Message) {
+	n.Mutex.Lock()
+	defer n.Mutex.Unlock()
+
+	for _, peer := range n.Peers {
+		go func(address string) {
+			conn, err := net.Dial("tcp", address)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			encoder := gob.NewEncoder(conn)
+			encoder.Encode(msg)
+		}(peer)
+	}
+}
+
+func (n *Node) AddPeer(address string) {
+	n.Mutex.Lock()
+	defer n.Mutex.Unlock()
+	n.Peers = append(n.Peers, address)
+}
