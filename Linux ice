@@ -1,19 +1,52 @@
-- mkdir ~/IceCoin_IceWall/node1 ~/IceCoin_IceWall/node2 ~/IceCoin_IceWall/node3
+mkdir ~/icecoin
+cd ~/icecoin
 
-•node 
-(5000, 5001,5002) 
+go mod init icecoin
 
-- cd ~/IceCoin_IceWall/node1
-go run icecoin_testnet_icewall.go
+mkdir blockchain wallet network storage
 
-- cd ~/IceCoin_IceWall/node2
-go run icecoin_testnet_icewall.go
+touch main.go
+touch blockchain/block.go
+touch blockchain/pow.go
+touch blockchain/reward.go
+touch blockchain/difficulty.go
+touch wallet/wallet.go
+touch wallet/transaction.go
+touch network/p2p.go
+touch storage/storage.go
 
-- cd ~/IceCoin_IceWall/node3
-go run icecoin_testnet_icewall.go
+ls -R
 
-- curl -X POST http://127.0.0.1:5000/register_node \
--H "Content-Type: application/json" \
--d '{"nodes":["http://127.0.0.1:5001","http://127.0.0.1:5002"]}'
+nano main.go
+nano blockchain/block.go
+nano blockchain/pow.go
+nano blockchain/reward.go
+nano network/p2p.go
+nano wallet/wallet.go
 
-curl http://127.0.0.1:5000/replace_chain
+
+
+node 1
+go mod tidy
+go run main.go 5000
+
+
+
+Ice Coin P2P Node ❄ running on :5000
+
+new terminal node 2
+
+cd ~/icecoin
+go run main.go 5001
+
+
+struktur----------
+
+icecoin/
+├── main.go
+├── blockchain/
+├── wallet/
+├── network/
+└── storage/
+
+
